@@ -54,6 +54,11 @@ import reactor.util.function.Tuple2;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
+import java.nio.ByteBuffer;
+import java.nio.CharBuffer;
+import java.nio.charset.Charset;
+import java.nio.charset.CharsetDecoder;
+import java.nio.charset.MalformedInputException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
@@ -308,26 +313,40 @@ public class ModService implements InitializingBean, DisposableBean {
     Path preferencesFile = preferencesService.getPreferences().getForgedAlliance().getPreferencesFile();
     Set<String> activeMods = new HashSet<>();
 
-    String preferencesContent = Files.readString(preferencesFile, StandardCharsets.UTF_8);
+    String preferencesContent = null;
+    try {
+      preferencesContent = Files.readString(preferencesFile, StandardCharsets.UTF_8);
+    } catch (MalformedInputException e) {
+      byte[] originalContent = Files.readAllBytes(preferencesFile);
+      Charset isoCharset = StandardCharsets.ISO_8859_1;
+      CharsetDecoder decoder = isoCharset.newDecoder();
+      CharBuffer charBuffer = decoder.decode(ByteBuffer.wrap(originalContent));
+      preferencesContent = charBuffer.toString();
+    }
+
     Matcher matcher = ACTIVE_MODS_PATTERN.matcher(preferencesContent);
     if (matcher.find()) {
       Matcher activeModMatcher = ACTIVE_MOD_PATTERN.matcher(matcher.group(0));
       while (activeModMatcher.find()) {
         String modUid = activeModMatcher.group(1);
-
         if (Boolean.parseBoolean(activeModMatcher.group(2))) {
           activeMods.add(modUid);
         }
       }
     }
-
     return activeMods;
   }
 
   private void writeActiveMods(Set<String> activeMods) {
     try {
       Path preferencesFile = preferencesService.getPreferences().getForgedAlliance().getPreferencesFile();
-      String preferencesContent = Files.readString(preferencesFile, StandardCharsets.UTF_8);
+      String preferencesContent = null;
+      try {
+        preferencesContent = Files.readString(preferencesFile, StandardCharsets.UTF_8);
+      } catch (MalformedInputException e) {
+        preferencesContent = new String(Files.readAllBytes(preferencesFile), StandardCharsets.ISO_8859_1);
+        preferencesContent = new String(preferencesContent.getBytes(), StandardCharsets.UTF_8);
+      }
 
       String currentActiveModsContent = null;
       Matcher matcher = ACTIVE_MODS_PATTERN.matcher(preferencesContent);
